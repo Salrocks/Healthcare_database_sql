@@ -73,22 +73,22 @@ CREATE SCHEMA bronze;
 A single staging table was created to mirror the raw CSV's structure column-for-column. No primary keys, no foreign keys, no constraints — this table's only job is to hold the data exactly as it exists in the source file.
 
 ```sql
-CREATE TABLE bronze.staging_healthcare (
-    name VARCHAR(100),
-    age INT,
-    gender VARCHAR(10),
-    blood_type VARCHAR(5),
-    medical_condition VARCHAR(100),
-    admission_date DATE,
-    doctor VARCHAR(100),
-    hospital VARCHAR(150),
-    insurance_provider VARCHAR(100),
-    billing_amount DECIMAL(10,2),
-    room_number INT,
-    admission_type VARCHAR(20),
-    discharge_date DATE,
-    medication VARCHAR(100),
-    test_results VARCHAR(20)
+CREATE TABLE bronze.staging_table (
+name VARCHAR(60),
+age INT,
+gender VARCHAR(50),
+blood_type VARCHAR(50),
+medical_condition VARCHAR(50),
+date_of_admission DATE,
+doctor_name VARCHAR(50),
+hospital VARCHAR(50),
+insurance_provider VARCHAR(50),
+billing_amount NUMERIC,
+room_number INT,
+admission_type VARCHAR(50),
+discharge_date DATE,
+medication VARCHAR(50),
+test_results VARCHAR(50)
 );
 ```
 
