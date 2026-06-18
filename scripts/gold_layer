@@ -1,0 +1,120 @@
+/*
+-------------------------------------------------------------------------
+Average Billing By Condition
+-------------------------------------------------------------------------
+Query:
+*/
+CREATE OR REPLACE VIEW gold.avg_billing_by_condition AS
+SELECT 
+medical_condition,
+ROUND(AVG(billing_amount), 2) AS average_billing
+FROM silver.healthcare_table
+GROUP BY medical_condition
+ORDER BY AVG(billing_amount) desc;
+
+-------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW gold.monthly_admission_trends AS
+SELECT
+    DATE_TRUNC('month', date_of_admission) AS admission_month,
+    COUNT(*) AS total_admissions
+FROM silver.healthcare_table
+GROUP BY DATE_TRUNC('month', date_of_admission)
+ORDER BY admission_month;
+
+-------------------------------------------------------------------------
+CREATE OR REPLACE VIEW gold.avg_length_of_stay AS
+SELECT 
+admission_type,
+ROUND(AVG(discharge_date - date_of_admission),1) AS average_time_per_admission
+FROM silver.healthcare_table
+GROUP BY admission_type
+ORDER BY average_time_per_admission DESC
+
+-------------------------------------------------------------------------
+CREATE OR REPLACE VIEW gold.doctor_workload_ranking AS
+SELECT 
+	doctor_first_name,
+	doctor_last_name,
+	COUNT(*) as patients_seen_by_doctor,
+	RANK() OVER (ORDER BY COUNT(*) DESC) AS doctor_rank
+FROM silver.healthcare_table
+GROUP BY doctor_first_name, doctor_last_name
+ORDER BY doctor_rank 
+
+-------------------------------------------------------------------------
+CREATE OR REPLACE VIEW gold.billing_by_insurance_provider AS
+SELECT 
+insurance_provider, 
+ROUND(MAX(billing_amount),1) AS maximum_billing_amount,
+ROUND(MIN(billing_amount),1) AS minimum_billing_amount,
+ROUND(AVG(billing_amount),1) AS avg_billing_amount,
+COUNT(*) AS total_bill_to_insurance
+FROM silver.healthcare_table
+GROUP BY insurance_provider
+
+-------------------------------------------------------------------------
+CREATE OR REPLACE VIEW gold.test_result_distribution AS
+SELECT 
+medical_condition, 
+SUM(CASE WHEN test_results = 'Normal' THEN 1 ELSE 0 END) as normal,
+SUM(CASE WHEN test_results = 'Inconclusive' THEN 1 ELSE 0 END) as inconclusive,
+SUM(CASE WHEN test_results = 'Abnormal' THEN 1 ELSE 0 END) as Abnormal,
+COUNT(*) AS results,
+ROUND(100.0 * SUM(CASE WHEN test_results = 'Normal' THEN 1 ELSE 0 END) / COUNT(*), 2) AS normal_percentage_occurance,
+ROUND(100.0 * SUM(CASE WHEN test_results = 'Abnormal' THEN 1 ELSE 0 END) / COUNT(*), 2) AS abnormal_percentage_occurance,
+ROUND(100.0 * SUM(CASE WHEN test_results = 'Inconclusive' THEN 1 ELSE 0 END) / COUNT(*), 2) AS inconclusive_percentage_occurance
+FROM silver.healthcare_table
+GROUP BY medical_condition
+ORDER BY medical_condition
+
+-------------------------------------------------------------------------
+CREATE OR REPLACE VIEW gold.top_10_highest_billed AS
+SELECT 
+patient_first_name, 
+patient_last_name,
+doctor_first_name,
+doctor_last_name,
+billing_amount,
+hospital,
+medical_condition,
+admission_type,
+date_of_admission,
+discharge_date
+FROM silver.healthcare_table
+ORDER BY billing_amount DESC
+LIMIT 10
+
+
+-------------------------------------------------------------------------
+CREATE OR REPLACE VIEW gold.patient_readmission_report AS
+WITH multiple_visit AS (
+SELECT 
+patient_first_name,
+patient_last_name,
+COUNT(date_of_admission) AS times_at_hospital
+FROM silver.healthcare_table
+GROUP BY patient_first_name, patient_last_name
+),
+
+amounts AS (
+SELECT 
+patient_first_name,
+patient_last_name, 
+ROUND(AVG(billing_amount),2) AS pt_avg_billing,
+SUM(billing_amount) AS pt_total_billing
+FROM silver.healthcare_table
+GROUP BY patient_first_name, patient_last_name
+)
+
+SELECT 
+mv.patient_first_name,
+mv.patient_last_name,
+mv.times_at_hospital,
+a.pt_avg_billing,
+a.pt_total_billing
+FROM multiple_visit AS mv
+LEFT JOIN amounts AS a
+ON mv.patient_first_name = a.patient_first_name AND mv.patient_last_name = a.patient_last_name
+WHERE mv.times_at_hospital > 1
+ORDER BY mv.times_at_hospital DESC
