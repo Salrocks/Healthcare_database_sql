@@ -1,0 +1,86 @@
+CREATE OR REPLACE PROCEDURE silver.load_healthcare_table()
+LANGUAGE plpgsql
+AS $$
+BEGIN
+
+RAISE NOTICE 'Starting Silver load: healthcare_table';
+
+
+RAISE NOTICE 'Truncating existing Silver data...';
+TRUNCATE TABLE silver.healthcare_table;
+ 
+RAISE NOTICE 'Inserting cleaned data from Bronze...';
+INSERT INTO silver.healthcare_table
+SELECT *
+FROM (
+
+SELECT
+SUBSTRING(
+    TRIM(REGEXP_REPLACE(REGEXP_REPLACE(INITCAP(LOWER(name)), '^(Mr|Mrs|Ms|Dr)\.?\s*', '', 'i'),
+        '\s*,?\s*(PhD|Jr|Sr|MD|II|III)\.?$', '', 'i')),
+    1,
+    POSITION(' ' IN TRIM(REGEXP_REPLACE(REGEXP_REPLACE(INITCAP(LOWER(name)), '^(Mr|Mrs|Ms|Dr)\.?\s*', '', 'i'),
+        '\s*,?\s*(PhD|Jr|Sr|MD|II|III)\.?$', '', 'i'))) - 1
+) AS patient_first_name,
+
+SUBSTRING(
+    TRIM(REGEXP_REPLACE(REGEXP_REPLACE(INITCAP(LOWER(name)), '^(Mr|Mrs|Ms|Dr)\.?\s*', '', 'i'),
+        '\s*,?\s*(PhD|Jr|Sr|MD|II|III)\.?$', '', 'i')),
+    POSITION(' ' IN TRIM(REGEXP_REPLACE(REGEXP_REPLACE(INITCAP(LOWER(name)), '^(Mr|Mrs|Ms|Dr)\.?\s*', '', 'i'),
+        '\s*,?\s*(PhD|Jr|Sr|MD|II|III)\.?$', '', 'i'))) + 1,
+    LENGTH(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(INITCAP(LOWER(name)), '^(Mr|Mrs|Ms|Dr)\.?\s*', '', 'i'),
+        '\s*,?\s*(PhD|Jr|Sr|MD|II|III)\.?$', '', 'i')))
+) AS patient_last_name,
+age,
+gender,
+blood_type,
+medical_condition,
+date_of_admission,
+SPLIT_PART(
+        TRIM(REGEXP_REPLACE(
+            TRIM(REGEXP_REPLACE(INITCAP(LOWER(doctor_name)), '^(Mr|Mrs|Ms|Dr)\.?\s*', '', 'i')),
+            '\s*,?\s*\b([A-Z]{2,5}(?:\.?,?\s*[A-Z]{2,5})*)\.?\s*$', ''
+        )),
+        ' ', 1
+    ) AS doctor_first_name,
+
+    -- Last name = everything after the first space in the cleaned name
+    SUBSTRING(
+        TRIM(REGEXP_REPLACE(
+            TRIM(REGEXP_REPLACE(INITCAP(LOWER(doctor_name)), '^(Mr|Mrs|Ms|Dr)\.?\s*', '', 'i')),
+            '\s*,?\s*\b([A-Z]{2,5}(?:\.?,?\s*[A-Z]{2,5})*)\.?\s*$', ''
+        ))
+        FROM POSITION(' ' IN TRIM(REGEXP_REPLACE(
+            TRIM(REGEXP_REPLACE(INITCAP(LOWER(doctor_name)), '^(Mr|Mrs|Ms|Dr)\.?\s*', '', 'i')),
+            '\s*,?\s*\b([A-Z]{2,5}(?:\.?,?\s*[A-Z]{2,5})*)\.?\s*$', ''
+        ))) + 1
+    ) AS doctor_last_name,
+
+TRIM(
+    REGEXP_REPLACE(
+        REGEXP_REPLACE(
+            TRIM(REGEXP_REPLACE(REPLACE(REPLACE(hospital, '-', ' '), ',', ''), '\s+', ' ', 'g')),
+            '^and\s+', '', 'i'
+        ),
+        '\s+and$', '', 'i'
+    )
+) AS hospital,
+insurance_provider,
+CASE
+	WHEN billing_amount IS NULL then 0
+	WHEN billing_amount < 0 THEN ROUND(ABS(billing_amount),2)
+	ELSE ROUND(billing_amount,2)
+END AS billing_amount,
+room_number,
+admission_type,
+discharge_date ,
+medication ,
+test_results 
+
+FROM bronze.staging_table
+);
+
+RAISE NOTICE 'Silver healthcare table reloaded successfully.';
+
+END;
+$$;
