@@ -1,3 +1,29 @@
+CREATE TABLE silver.healthcare_table (
+patient_first_name VARCHAR(100),
+patient_last_name VARCHAR(100),
+age INT,
+gender VARCHAR(50),
+blood_type VARCHAR(50),
+medical_condition VARCHAR(50),
+date_of_admission DATE,
+doctor_first_name VARCHAR(100),
+doctor_last_name VARCHAR(100),
+hospital VARCHAR(100),
+insurance_provider VARCHAR(50),
+billing_amount NUMERIC,
+room_number INT,
+admission_type VARCHAR(50),
+discharge_date DATE,
+medication VARCHAR(50),
+test_results VARCHAR(50)
+);
+
+
+
+INSERT INTO silver.healthcare_table
+SELECT *
+FROM (
+
 SELECT
 SUBSTRING(
     TRIM(REGEXP_REPLACE(REGEXP_REPLACE(INITCAP(LOWER(name)), '^(Mr|Mrs|Ms|Dr)\.?\s*', '', 'i'),
@@ -56,6 +82,12 @@ CASE
 	ELSE ROUND(billing_amount,2)
 END AS billing_amount,
 room_number,
-admission_type
+admission_type,
+discharge_date ,
+medication ,
+test_results 
 
 FROM bronze.staging_table
+
+)
+
