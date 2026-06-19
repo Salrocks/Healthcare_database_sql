@@ -1,12 +1,10 @@
-# Healthcare SQL Pipeline — Full Project Walkthrough
+# 🏥 Healthcare SQL Pipeline — Full Project Walkthrough
 
 A PostgreSQL data pipeline that transforms a raw healthcare dataset into a clean, query-ready database and a set of business-facing analytical views, using a **Bronze → Silver → Gold** medallion architecture.
 
-This document is a complete, step-by-step walkthrough of the project: what was built, how it works, and why each decision was made.
-
 ---
 
-## Roadmap — What Happens at Each Layer
+## 🗺️ Roadmap — What Happens at Each Layer
 
 Before diving into the walkthrough, here's a high-level map of what each layer is responsible for, used as a quick reference throughout this project.
 
@@ -21,7 +19,7 @@ Before diving into the walkthrough, here's a high-level map of what each layer i
 
 ---
 
-## 1. Objective of the Lab
+## 🎯 1. Objective of the Lab
 
 The goal of this project is to practice real-world data engineering and SQL analytical skills by building a complete pipeline around a single dataset, from raw ingestion all the way to business-ready insights. Specifically, this lab was designed to:
 
@@ -35,7 +33,7 @@ This project uses the [Healthcare Dataset by prasad22](https://www.kaggle.com/da
 
 ---
 
-## 2. Tools Used
+## 🛠️ 2. Tools Used
 
 | Tool | Purpose |
 |---|---|
@@ -47,7 +45,7 @@ This project uses the [Healthcare Dataset by prasad22](https://www.kaggle.com/da
 
 ---
 
-## 3. Schema Design — Medallion Architecture
+## 🏗️ 3. Schema Design — Medallion Architecture
 
 This project follows the **medallion architecture** pattern, which organizes data into three progressive layers, each with a distinct purpose. Rather than transforming raw data in one single step, the data moves through layers of increasing structure and quality.
 
@@ -59,9 +57,7 @@ This project follows the **medallion architecture** pattern, which organizes dat
 
 Each layer lives in its own PostgreSQL schema (`bronze`, `silver`, `gold`), so the database structure itself documents the data's journey from raw to refined.
 
-**Why this approach?** Separating raw data from cleaned data means the original source is never lost or overwritten. If a transformation step turns out to be wrong, Silver and Gold can always be rebuilt from Bronze without re-downloading anything. It's the same pattern used in real production data pipelines.
-
-**A note on the original plan vs. the final design:** the initial plan was to normalize Silver into five separate tables (`patients`, `doctors`, `hospitals`, `insurance_providers`, `admissions`) following 3NF. During development, this was simplified to a **single cleaned table**, `silver.healthcare_table`.
+Separating raw data from cleaned data means the original source is never lost or overwritten. If a transformation step turns out to be wrong, Silver and Gold can always be rebuilt from Bronze without re-downloading anything. It's the same pattern used in real production data pipelines.
 
 **Why one table was the right call for this dataset specifically:**
 
@@ -69,13 +65,9 @@ Each layer lives in its own PostgreSQL schema (`bronze`, `silver`, `gold`), so t
 
 2. **No analytical question required the join.** Every one of the 8 Gold views could be fully answered from one flat table. Normalization earns its cost when you need to update an entity in one place (e.g. correct a hospital's name once instead of in 10,000 rows) or enforce referential integrity. Neither was needed here — there's no write-heavy application sitting on top of this data, just read-only analytics.
 
-3. **Simpler is more honest here.** A 5-table schema built on a guessed identity key would look more "proper" on the surface, but it would be hiding a real flaw rather than solving it. A single table doesn't pretend to have a relationship the data doesn't actually support.
-
-**Why the next project will normalize properly:** the planned finance project (multiple raw files joined by a real shared key, such as a `customer_id` that exists consistently across files) is a better candidate for true normalization, because the source data actually provides a trustworthy identity key to join on. Normalization is the right tool when the data supports it — this project was a case where forcing it on would have created a worse, more fragile schema than just keeping it flat.
-
 ---
 
-## 4. Bronze Layer — Walkthrough
+## 🥉 4. Bronze Layer — Walkthrough
 
 ### Purpose
 
@@ -115,9 +107,9 @@ CREATE TABLE bronze.staging_table (
 
 **Key design decision — `billing_amount NUMERIC` with no precision/scale.** The raw CSV contains billing values with long, irregular decimal tails (e.g. `43282.28335770435`). Three options were considered:
 
-- `FLOAT` — rejected, because floating-point types store decimals as binary approximations. Converting a value like `43282.28335770435` to `FLOAT` can silently shift digits far down the decimal place, which technically alters the source data.
-- `DECIMAL(10,2)` — rejected for Bronze specifically, because rounding to 2 decimal places at ingestion is a transformation, not raw storage. It would violate the principle that Bronze should be untouched.
-- `NUMERIC` (no precision/scale) — chosen, because it stores the exact decimal value with no rounding and no binary approximation. This preserves the source data perfectly, and the rounding decision is made deliberately later, in Silver.
+- `FLOAT` — Rejected, because floating-point types store decimals as binary approximations. Converting a value like `43282.28335770435` to `FLOAT` can silently shift digits far down the decimal place, which technically alters the source data.
+- `DECIMAL(10,2)` — Rejected for Bronze specifically, because rounding to 2 decimal places at ingestion is a transformation, not raw storage. It would violate the principle that Bronze should be untouched.
+- `NUMERIC` (no precision/scale) — Chosen, because it stores the exact decimal value with no rounding and no binary approximation. This preserves the source data perfectly, and the rounding decision is made deliberately later, in Silver.
 
 ### Step 3 — Load the CSV into the staging table
 
@@ -143,7 +135,7 @@ A quick sanity check to confirm the row count matches the source file and that v
 
 ---
 
-## 5. Data Quality Testing — Bridging Bronze and Silver
+## 🔍 5. Data Quality Testing — Bridging Bronze and Silver
 
 Before writing the Silver transformation logic, every column in `bronze.staging_table` was tested individually to identify what needed fixing. This step matters because it turns "I think the data is messy" into "I know exactly which rows are messy and why."
 
@@ -181,7 +173,7 @@ This table is the bridge between Bronze and Silver — every transformation writ
 
 ---
 
-## 6. Silver Layer — Walkthrough
+## 🥈 6. Silver Layer — Walkthrough
 
 ### Purpose
 
@@ -226,14 +218,16 @@ Breaking this down:
 - The second `REGEXP_REPLACE` strips a suffix (`PhD`, `Jr`, `Sr`, `MD`, `II`, `III`) from the **end** of the string, with an optional leading comma.
 - `'i'` on both makes the match case-insensitive.
 
-**A bug caught and fixed during development:** The first version of this logic calculated `POSITION(' ' IN name)` using the *original, uncleaned* name, then applied that position to the *cleaned* string. Since stripping the prefix shortens the string, the space position no longer lined up — this would have cut names in the wrong place. The fix was to compute the space position from the same cleaned string being split, not the original.
+**A bug caught and fixed during development:** the first version of this logic calculated `POSITION(' ' IN name)` using the *original, uncleaned* name, then applied that position to the *cleaned* string. Since stripping the prefix shortens the string, the space position no longer lined up — this would have cut names in the wrong place. The fix was to compute the space position from the same cleaned string being split, not the original.
 
 ```sql
 -- First name = everything before the first space in the CLEANED name
 SUBSTRING(
-    <cleaned name expression>,
+    TRIM(REGEXP_REPLACE(REGEXP_REPLACE(INITCAP(LOWER(name)), '^(Mr|Mrs|Ms|Dr)\.?\s*', '', 'i'),
+        '\s*,?\s*(PhD|Jr|Sr|MD|II|III)\.?$', '', 'i')),
     1,
-    POSITION(' ' IN <cleaned name expression>) - 1
+    POSITION(' ' IN TRIM(REGEXP_REPLACE(REGEXP_REPLACE(INITCAP(LOWER(name)), '^(Mr|Mrs|Ms|Dr)\.?\s*', '', 'i'),
+        '\s*,?\s*(PhD|Jr|Sr|MD|II|III)\.?$', '', 'i'))) - 1
 ) AS patient_first_name
 ```
 
@@ -245,7 +239,7 @@ Doctor names had an extra wrinkle: trailing credentials like `DDS` or `MD`. Rath
 '\s*,?\s*\b([A-Z]{2,5}(?:\.?,?\s*[A-Z]{2,5})*)\.?\s*$'
 ```
 
-This matches one or more 2–5 letter uppercase abbreviations at the end of the name, separated by optional punctuation — so it generalizes beyond a hardcoded list. In the final Silver table, only `doctor_first_name` and `doctor_last_name` were kept; the credential itself was not persisted as a separate column, since it wasn't required by any of the planned Gold-layer questions.
+This matches one or more 2–5 letter uppercase abbreviations at the end of the name, separated by optional punctuation — so it generalizes beyond a hardcoded list. **Decision:** in the final Silver table, only `doctor_first_name` and `doctor_last_name` were kept; the credential itself was not persisted as a separate column, since it wasn't required by any of the planned Gold-layer questions.
 
 ### Key transformation 3 — Hospital name cleanup
 
@@ -297,7 +291,7 @@ The procedure truncates `silver.healthcare_table` and re-runs the full transform
 
 ---
 
-## 7. Gold Layer — Walkthrough
+## 🥇 7. Gold Layer — Walkthrough
 
 ### Purpose
 
@@ -435,13 +429,11 @@ LEFT JOIN amounts AS a
 ORDER BY mv.times_at_hospital DESC;
 ```
 
-Technique: this is the most complex view in the project, combining two CTEs and a `HAVING` clause. `multiple_visit` identifies which patients qualify as "readmitted" (more than one admission), filtering with `HAVING` at the aggregation level rather than filtering afterward — this is more efficient because the dataset is reduced *before* the join happens, not after. `amounts` independently calculates billing totals for every patient. The two are joined together in the final `SELECT`, producing one row per readmitted patient with their full billing picture.
-
-A simpler, single-query version of this same result is possible using only `GROUP BY` + `HAVING` without any CTEs or joins. The two-CTE structure was deliberately kept because it separates the "who is a readmitted patient" logic from the "what's their billing summary" logic into two distinct, independently readable steps — a useful pattern to demonstrate for more complex multi-stage analytical questions, even though this particular question could be solved more concisely.
+Technique: Combining two CTEs and a `HAVING` clause. `multiple_visit` identifies which patients qualify as "readmitted" (more than one admission), filtering with `HAVING` at the aggregation level rather than filtering afterward — this is more efficient because the dataset is reduced *before* the join happens, not after. `amounts` independently calculates billing totals for every patient. The two are joined together in the final `SELECT`, producing one row per readmitted patient with their full billing picture.
 
 ---
 
-## 8. Summary — End-to-End Pipeline
+## ✅ 8. Summary — End-to-End Pipeline
 
 The full pipeline, run from scratch, looks like this:
 
