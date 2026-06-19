@@ -1,19 +1,38 @@
 /*
--------------------------------------------------------------------------
-Average Billing By Condition
--------------------------------------------------------------------------
-Query:
+============================================================
+ Gold Layer — Analytical Views
+ Purpose: Business-ready views built on top of silver.healthcare_table.
+ Each view answers one specific analytical question and stays
+ automatically up to date whenever Silver is reloaded.
+============================================================
+*/
+
+
+/*
+------------------------------------------------------------
+1. Average Billing By Condition
+------------------------------------------------------------
+Purpose: Show which medical conditions are associated with the
+highest average billing cost, ranked most to least expensive.
+Technique: GROUP BY + AVG
 */
 CREATE OR REPLACE VIEW gold.avg_billing_by_condition AS
-SELECT 
-medical_condition,
-ROUND(AVG(billing_amount), 2) AS average_billing
+SELECT
+    medical_condition,
+    ROUND(AVG(billing_amount), 2) AS average_billing
 FROM silver.healthcare_table
 GROUP BY medical_condition
-ORDER BY AVG(billing_amount) desc;
+ORDER BY AVG(billing_amount) DESC;
 
--------------------------------------------------------------------------
 
+/*
+------------------------------------------------------------
+2. Monthly Admission Trends
+------------------------------------------------------------
+Purpose: Track how many patients were admitted each month,
+revealing seasonal or trend patterns in hospital admissions.
+Technique: DATE_TRUNC + time-series aggregation
+*/
 CREATE OR REPLACE VIEW gold.monthly_admission_trends AS
 SELECT
     DATE_TRUNC('month', date_of_admission) AS admission_month,
@@ -22,99 +41,150 @@ FROM silver.healthcare_table
 GROUP BY DATE_TRUNC('month', date_of_admission)
 ORDER BY admission_month;
 
--------------------------------------------------------------------------
+
+/*
+------------------------------------------------------------
+3. Average Length of Stay by Admission Type
+------------------------------------------------------------
+Purpose: Compare how long patients stay in the hospital depending
+on whether their admission was Elective, Emergency, or Urgent.
+Technique: Date subtraction + GROUP BY
+*/
 CREATE OR REPLACE VIEW gold.avg_length_of_stay AS
-SELECT 
-admission_type,
-ROUND(AVG(discharge_date - date_of_admission),1) AS average_time_per_admission
+SELECT
+    admission_type,
+    ROUND(AVG(discharge_date - date_of_admission), 1) AS average_time_per_admission
 FROM silver.healthcare_table
 GROUP BY admission_type
-ORDER BY average_time_per_admission DESC
+ORDER BY average_time_per_admission DESC;
 
--------------------------------------------------------------------------
+
+/*
+------------------------------------------------------------
+4. Doctor Workload Ranking
+------------------------------------------------------------
+Purpose: Rank doctors by how many patients they've handled,
+identifying the busiest doctors in the dataset.
+Technique: COUNT + RANK() window function
+*/
 CREATE OR REPLACE VIEW gold.doctor_workload_ranking AS
-SELECT 
-	doctor_first_name,
-	doctor_last_name,
-	COUNT(*) as patients_seen_by_doctor,
-	RANK() OVER (ORDER BY COUNT(*) DESC) AS doctor_rank
+SELECT
+    doctor_first_name,
+    doctor_last_name,
+    COUNT(*) AS patients_seen_by_doctor,
+    RANK() OVER (ORDER BY COUNT(*) DESC) AS doctor_rank
 FROM silver.healthcare_table
 GROUP BY doctor_first_name, doctor_last_name
-ORDER BY doctor_rank 
+ORDER BY doctor_rank;
 
--------------------------------------------------------------------------
+
+/*
+------------------------------------------------------------
+5. Billing Breakdown by Insurance Provider
+------------------------------------------------------------
+Purpose: Compare billing patterns across insurance providers —
+their minimum, maximum, and average billed amounts.
+Technique: Multi-aggregate GROUP BY
+*/
 CREATE OR REPLACE VIEW gold.billing_by_insurance_provider AS
-SELECT 
-insurance_provider, 
-ROUND(MAX(billing_amount),1) AS maximum_billing_amount,
-ROUND(MIN(billing_amount),1) AS minimum_billing_amount,
-ROUND(AVG(billing_amount),1) AS avg_billing_amount,
-COUNT(*) AS total_bill_to_insurance
+SELECT
+    insurance_provider,
+    ROUND(MAX(billing_amount), 1) AS maximum_billing_amount,
+    ROUND(MIN(billing_amount), 1) AS minimum_billing_amount,
+    ROUND(AVG(billing_amount), 1) AS avg_billing_amount,
+    COUNT(*) AS total_bill_to_insurance
 FROM silver.healthcare_table
-GROUP BY insurance_provider
+GROUP BY insurance_provider;
 
--------------------------------------------------------------------------
+
+/*
+------------------------------------------------------------
+6. Test Result Distribution by Medical Condition
+------------------------------------------------------------
+Purpose: For each medical condition, show how test results break
+down (Normal / Abnormal / Inconclusive) in both raw counts and
+percentages, useful for spotting conditions with unusual outcomes.
+Technique: SUM(CASE WHEN...) + percentage calculation
+*/
 CREATE OR REPLACE VIEW gold.test_result_distribution AS
-SELECT 
-medical_condition, 
-SUM(CASE WHEN test_results = 'Normal' THEN 1 ELSE 0 END) as normal,
-SUM(CASE WHEN test_results = 'Inconclusive' THEN 1 ELSE 0 END) as inconclusive,
-SUM(CASE WHEN test_results = 'Abnormal' THEN 1 ELSE 0 END) as Abnormal,
-COUNT(*) AS results,
-ROUND(100.0 * SUM(CASE WHEN test_results = 'Normal' THEN 1 ELSE 0 END) / COUNT(*), 2) AS normal_percentage_occurance,
-ROUND(100.0 * SUM(CASE WHEN test_results = 'Abnormal' THEN 1 ELSE 0 END) / COUNT(*), 2) AS abnormal_percentage_occurance,
-ROUND(100.0 * SUM(CASE WHEN test_results = 'Inconclusive' THEN 1 ELSE 0 END) / COUNT(*), 2) AS inconclusive_percentage_occurance
+SELECT
+    medical_condition,
+    SUM(CASE WHEN test_results = 'Normal' THEN 1 ELSE 0 END) AS normal,
+    SUM(CASE WHEN test_results = 'Inconclusive' THEN 1 ELSE 0 END) AS inconclusive,
+    SUM(CASE WHEN test_results = 'Abnormal' THEN 1 ELSE 0 END) AS abnormal,
+    COUNT(*) AS results,
+    ROUND(100.0 * SUM(CASE WHEN test_results = 'Normal' THEN 1 ELSE 0 END) / COUNT(*), 2) AS normal_percentage_occurance,
+    ROUND(100.0 * SUM(CASE WHEN test_results = 'Abnormal' THEN 1 ELSE 0 END) / COUNT(*), 2) AS abnormal_percentage_occurance,
+    ROUND(100.0 * SUM(CASE WHEN test_results = 'Inconclusive' THEN 1 ELSE 0 END) / COUNT(*), 2) AS inconclusive_percentage_occurance
 FROM silver.healthcare_table
 GROUP BY medical_condition
-ORDER BY medical_condition
+ORDER BY medical_condition;
 
--------------------------------------------------------------------------
+
+/*
+------------------------------------------------------------
+7. Top 10 Highest Billed Admissions
+------------------------------------------------------------
+Purpose: Surface the 10 single most expensive hospital stays,
+along with full patient, doctor, and admission context.
+Technique: ORDER BY + LIMIT
+*/
 CREATE OR REPLACE VIEW gold.top_10_highest_billed AS
-SELECT 
-patient_first_name, 
-patient_last_name,
-doctor_first_name,
-doctor_last_name,
-billing_amount,
-hospital,
-medical_condition,
-admission_type,
-date_of_admission,
-discharge_date
+SELECT
+    patient_first_name,
+    patient_last_name,
+    doctor_first_name,
+    doctor_last_name,
+    billing_amount,
+    hospital,
+    medical_condition,
+    admission_type,
+    date_of_admission,
+    discharge_date
 FROM silver.healthcare_table
 ORDER BY billing_amount DESC
-LIMIT 10
+LIMIT 10;
 
 
--------------------------------------------------------------------------
+/*
+------------------------------------------------------------
+8. Patient Readmission Report
+------------------------------------------------------------
+Purpose: Identify patients who have been admitted more than once,
+along with their total visit count and billing summary across
+all their stays — useful for spotting frequent/high-cost patients.
+Technique: CTEs + HAVING + JOIN
+*/
 CREATE OR REPLACE VIEW gold.patient_readmission_report AS
 WITH multiple_visit AS (
-SELECT 
-patient_first_name,
-patient_last_name,
-COUNT(date_of_admission) AS times_at_hospital
-FROM silver.healthcare_table
-GROUP BY patient_first_name, patient_last_name
+    -- Step 1: identify patients with more than one admission
+    SELECT
+        patient_first_name,
+        patient_last_name,
+        COUNT(date_of_admission) AS times_at_hospital
+    FROM silver.healthcare_table
+    GROUP BY patient_first_name, patient_last_name
+    HAVING COUNT(date_of_admission) > 1
 ),
-
 amounts AS (
-SELECT 
-patient_first_name,
-patient_last_name, 
-ROUND(AVG(billing_amount),2) AS pt_avg_billing,
-SUM(billing_amount) AS pt_total_billing
-FROM silver.healthcare_table
-GROUP BY patient_first_name, patient_last_name
+    -- Step 2: calculate billing summary for all patients
+    SELECT
+        patient_first_name,
+        patient_last_name,
+        ROUND(AVG(billing_amount), 2) AS pt_avg_billing,
+        ROUND(SUM(billing_amount), 2) AS pt_total_billing
+    FROM silver.healthcare_table
+    GROUP BY patient_first_name, patient_last_name
 )
-
-SELECT 
-mv.patient_first_name,
-mv.patient_last_name,
-mv.times_at_hospital,
-a.pt_avg_billing,
-a.pt_total_billing
+-- Step 3: combine readmitted patients with their billing summary
+SELECT
+    mv.patient_first_name,
+    mv.patient_last_name,
+    mv.times_at_hospital,
+    a.pt_avg_billing,
+    a.pt_total_billing
 FROM multiple_visit AS mv
 LEFT JOIN amounts AS a
-ON mv.patient_first_name = a.patient_first_name AND mv.patient_last_name = a.patient_last_name
-WHERE mv.times_at_hospital > 1
-ORDER BY mv.times_at_hospital DESC
+    ON mv.patient_first_name = a.patient_first_name
+    AND mv.patient_last_name = a.patient_last_name
+ORDER BY mv.times_at_hospital DESC;
