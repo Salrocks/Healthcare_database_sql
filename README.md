@@ -462,5 +462,23 @@ CALL silver.load_healthcare_table();
 Every Gold view immediately reflects the refreshed Silver data — no manual rebuilding required.
 
 ---
+## 🤝 Working Process — How This Project Was Built
 
-All scripts referenced in this document can be found in [`/scripts`](./scripts), organized by layer: `/scripts/bronze`, `/scripts/silver`, `/scripts/gold`.
+This project was built through ongoing collaboration with Claude, which played two distinct roles depending on the moment: at times acting like a **manager**, directing how the project should be structured and what to tackle next; at other times acting like a **coworker**, sitting alongside me to debug code and explain why something broke.
+
+**As a manager — setting direction and structure**
+
+- Defined the medallion architecture approach (Bronze → Silver → Gold) and explained what belongs in each layer before any code was written.
+- Laid out the sequence of work — schema setup, then data quality testing, then transformations, then analytical views — rather than letting the project develop in a random order.
+- Provided the set of 8 Gold-layer analytical questions to build toward, giving the project a clear scope and endpoint instead of an open-ended "explore the data" approach.
+- Flagged when I was about to make a structural decision worth reconsidering (e.g. wrapping one-time schema setup in a stored procedure, or whether deduplication logic actually belonged in Silver) and asked me to confirm intent before proceeding.
+- Pushed back on rather than simply executing every request — for example, questioning whether a CTE was earning its place in a query, or whether normalizing into 5 tables was actually the right design given the data didn't support a reliable identity key.
+
+**As a coworker — debugging alongside me**
+
+- Walked through specific SQL bugs line by line as I wrote them
+- Explained *why* something broke, not just supplied a fix — e.g. why `FLOAT` silently alters decimal values, why `COALESCE` was dead code in a `CASE` statement, why a `WHERE` clause and a `CASE` condition checking the same thing produces misleading results.
+- Reviewed my own attempts at writing analytical queries (length of stay, readmission report, top 10 billed) and pointed out logic errors before they made it into the final views.
+  
+---
+All scripts referenced in this document can be found in [`/scripts`](./scripts), organized by layer: `/scripts/bronze_layer`, `/scripts/silver_layer`, `/scripts/gold_layer`. Procedures can be found in the `/procedures` folder
