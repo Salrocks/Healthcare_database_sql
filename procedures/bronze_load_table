@@ -1,0 +1,58 @@
+CREATE OR REPLACE PROCEDURE bronze.setup_bronze_layer()
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    row_count INT;
+BEGIN
+
+    -- =========================================================
+    -- Creating the Schema Architecture
+    -- =========================================================
+    RAISE NOTICE 'Resetting schemas...';
+    DROP SCHEMA IF EXISTS bronze CASCADE;
+    DROP SCHEMA IF EXISTS silver CASCADE;
+    DROP SCHEMA IF EXISTS gold CASCADE;
+
+    CREATE SCHEMA bronze;
+    CREATE SCHEMA silver;
+    CREATE SCHEMA gold;
+
+    -- =========================================================
+    -- Creating staging table in bronze layer
+    -- =========================================================
+    RAISE NOTICE 'Creating bronze.staging_table...';
+    CREATE TABLE bronze.staging_table (
+        name                VARCHAR(60),
+        age                 INT,
+        gender              VARCHAR(50),
+        blood_type          VARCHAR(50),
+        medical_condition   VARCHAR(50),
+        date_of_admission   DATE,
+        doctor_name         VARCHAR(50),
+        hospital            VARCHAR(50),
+        insurance_provider  VARCHAR(50),
+        billing_amount      NUMERIC,
+        room_number         INT,
+        admission_type      VARCHAR(50),
+        discharge_date      DATE,
+        medication          VARCHAR(50),
+        test_results        VARCHAR(50)
+    );
+
+    -- =========================================================
+    -- Import data from Kaggle into our staging table
+    -- =========================================================
+    RAISE NOTICE 'Loading CSV into bronze.staging_table...';
+    EXECUTE format(
+        'COPY bronze.staging_table FROM %L DELIMITER '','' CSV HEADER',
+        '/tmp/healthcare_dataset.csv'
+    );
+
+    -- =========================================================
+    -- Verify all rows were copied
+    -- =========================================================
+    SELECT COUNT(*) INTO row_count FROM bronze.staging_table;
+    RAISE NOTICE 'Bronze stage complete. Total rows loaded: %', row_count;
+
+END;
+$$;
