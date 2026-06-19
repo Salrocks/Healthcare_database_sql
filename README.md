@@ -310,7 +310,7 @@ GROUP BY medical_condition
 ORDER BY AVG(billing_amount) DESC;
 ```
 
-Technique: basic `GROUP BY` aggregation.
+Technique: Basic `GROUP BY` aggregation.
 
 ### 7.2 — `gold.monthly_admission_trends`
 
@@ -336,7 +336,7 @@ GROUP BY admission_type
 ORDER BY average_time_per_admission DESC;
 ```
 
-Technique: date subtraction. In PostgreSQL, subtracting two `DATE` values returns a plain integer number of days — simpler and more directly usable in `AVG()` than `AGE()`, which returns an interval broken into years/months/days and requires extra steps to convert into a single day count.
+Technique: Date subtraction. In PostgreSQL, subtracting two `DATE` values returns a plain integer number of days — simpler and more directly usable in `AVG()` than `AGE()`, which returns an interval broken into years/months/days and requires extra steps to convert into a single day count.
 
 ### 7.4 — `gold.doctor_workload_ranking`
 
@@ -366,7 +366,7 @@ FROM silver.healthcare_table
 GROUP BY insurance_provider;
 ```
 
-Technique: multiple aggregate functions in a single `GROUP BY`.
+Technique: Multiple aggregate functions in a single `GROUP BY`.
 
 ### 7.6 — `gold.test_result_distribution`
 
@@ -385,7 +385,7 @@ GROUP BY medical_condition
 ORDER BY medical_condition;
 ```
 
-Technique: conditional aggregation using `SUM(CASE WHEN...)`, plus deriving percentages from raw counts. Multiplying by `100.0` (not `100`) forces PostgreSQL to use decimal division instead of integer division, which would otherwise truncate the result to a whole number.
+Technique: Conditional aggregation using `SUM(CASE WHEN...)`, plus deriving percentages from raw counts. Multiplying by `100.0` (not `100`) forces PostgreSQL to use decimal division instead of integer division, which would otherwise truncate the result to a whole number.
 
 ### 7.7 — `gold.top_10_highest_billed`
 
@@ -400,7 +400,7 @@ ORDER BY billing_amount DESC
 LIMIT 10;
 ```
 
-Technique: simple `ORDER BY` + `LIMIT`. An earlier version of this view used `RANK()` with a `WHERE rank <= 10` filter — both approaches are valid, but `RANK()` would return more than 10 rows if multiple admissions tie for 10th place, while `LIMIT` always returns exactly 10. `LIMIT` was kept for simplicity since exact-10 output was preferred for this view.
+Technique: Simple `ORDER BY` + `LIMIT`. An earlier version of this view used `RANK()` with a `WHERE rank <= 10` filter — both approaches are valid, but `RANK()` would return more than 10 rows if multiple admissions tie for 10th place, while `LIMIT` always returns exactly 10. `LIMIT` was kept for simplicity since exact-10 output was preferred for this view.
 
 ### 7.8 — `gold.patient_readmission_report`
 
