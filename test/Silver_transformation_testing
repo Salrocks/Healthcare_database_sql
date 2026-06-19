@@ -1,0 +1,245 @@
+/*
+============================================================
+ Data Quality Tests — Bronze Layer (bronze.staging_table)
+ Purpose: Validate raw data before Silver transformations
+============================================================
+*/
+
+-- ------------------------------------------------------------
+-- NAME
+-- ------------------------------------------------------------
+
+-- Test: check for leading/trailing whitespace in name
+-- Names were also found in random upper/lower case
+SELECT name
+FROM bronze.staging_table
+WHERE TRIM(name) != name;
+
+-- Fix: standardize casing (first letter of each word capitalized),
+-- strip prefixes (Mr/Mrs/Ms/Dr) and suffixes (PhD/Jr/Sr/MD/II/III),
+-- then split into first_name and last_name
+SELECT
+    INITCAP(LOWER(name)) AS name,
+
+    TRIM(REGEXP_REPLACE(REGEXP_REPLACE(INITCAP(LOWER(name)), '^(Mr|Mrs|Ms|Dr)\.?\s*', '', 'i'),
+        '\s*,?\s*(PhD|Jr|Sr|MD|II|III)\.?$', '', 'i')) AS no_prefix,
+
+    -- First name = everything before the first space in the CLEANED name
+    SUBSTRING(
+        TRIM(REGEXP_REPLACE(REGEXP_REPLACE(INITCAP(LOWER(name)), '^(Mr|Mrs|Ms|Dr)\.?\s*', '', 'i'),
+            '\s*,?\s*(PhD|Jr|Sr|MD|II|III)\.?$', '', 'i')),
+        1,
+        POSITION(' ' IN TRIM(REGEXP_REPLACE(REGEXP_REPLACE(INITCAP(LOWER(name)), '^(Mr|Mrs|Ms|Dr)\.?\s*', '', 'i'),
+            '\s*,?\s*(PhD|Jr|Sr|MD|II|III)\.?$', '', 'i'))) - 1
+    ) AS first_name,
+
+    -- Last name = everything after the first space in the CLEANED name
+    SUBSTRING(
+        TRIM(REGEXP_REPLACE(REGEXP_REPLACE(INITCAP(LOWER(name)), '^(Mr|Mrs|Ms|Dr)\.?\s*', '', 'i'),
+            '\s*,?\s*(PhD|Jr|Sr|MD|II|III)\.?$', '', 'i')),
+        POSITION(' ' IN TRIM(REGEXP_REPLACE(REGEXP_REPLACE(INITCAP(LOWER(name)), '^(Mr|Mrs|Ms|Dr)\.?\s*', '', 'i'),
+            '\s*,?\s*(PhD|Jr|Sr|MD|II|III)\.?$', '', 'i'))) + 1,
+        LENGTH(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(INITCAP(LOWER(name)), '^(Mr|Mrs|Ms|Dr)\.?\s*', '', 'i'),
+            '\s*,?\s*(PhD|Jr|Sr|MD|II|III)\.?$', '', 'i')))
+    ) AS last_name
+FROM bronze.staging_table;
+
+
+-- ------------------------------------------------------------
+-- AGE
+-- ------------------------------------------------------------
+
+-- Test: check for nulls or blank values
+SELECT DISTINCT age
+FROM bronze.staging_table;
+
+-- Test: check for extreme/invalid values (age should be 1–100)
+SELECT age
+FROM bronze.staging_table
+WHERE age > 100 OR age <= 0;
+
+
+-- ------------------------------------------------------------
+-- GENDER
+-- ------------------------------------------------------------
+
+-- Test: confirm only 'Male' / 'Female' exist, correctly capitalized
+SELECT DISTINCT gender
+FROM bronze.staging_table;
+
+
+-- ------------------------------------------------------------
+-- BLOOD TYPE
+-- ------------------------------------------------------------
+
+-- Test: confirm values follow standard format (e.g. A+, O-)
+SELECT DISTINCT blood_type
+FROM bronze.staging_table;
+
+-- Test: check for leading/trailing whitespace
+SELECT DISTINCT blood_type
+FROM bronze.staging_table
+WHERE blood_type != TRIM(blood_type);
+
+
+-- ------------------------------------------------------------
+-- MEDICAL CONDITION
+-- ------------------------------------------------------------
+
+-- Test: confirm no nulls, correct capitalization
+SELECT DISTINCT medical_condition
+FROM bronze.staging_table;
+
+
+-- ------------------------------------------------------------
+-- DATE OF ADMISSION
+-- ------------------------------------------------------------
+
+-- Test: check for null dates or dates beyond today (6/18/2026)
+-- Using a fixed date instead of NOW() keeps this test reproducible
+SELECT DISTINCT date_of_admission
+FROM bronze.staging_table
+WHERE date_of_admission IS NULL OR date_of_admission > '2026-06-18';
+
+
+-- ------------------------------------------------------------
+-- DOCTOR NAME
+-- ------------------------------------------------------------
+
+-- Test: some doctors have 'Ms./Mr./Dr.' prefixes, some have 'DDS' suffixes
+-- Goal: strip prefixes/titles, keep DDS/credentials as a separate value
+SELECT DISTINCT doctor_name
+FROM bronze.staging_table;
+
+-- Fix: extract clean first_name and last_name (prefix/suffix removed)
+SELECT
+    doctor_name,
+
+    -- First name = everything before the first space in the cleaned name
+    SPLIT_PART(
+        TRIM(REGEXP_REPLACE(
+            TRIM(REGEXP_REPLACE(INITCAP(LOWER(doctor_name)), '^(Mr|Mrs|Ms|Dr)\.?\s*', '', 'i')),
+            '\s*,?\s*\b([A-Z]{2,5}(?:\.?,?\s*[A-Z]{2,5})*)\.?\s*$', ''
+        )),
+        ' ', 1
+    ) AS doctor_first_name,
+
+    -- Last name = everything after the first space in the cleaned name
+    SUBSTRING(
+        TRIM(REGEXP_REPLACE(
+            TRIM(REGEXP_REPLACE(INITCAP(LOWER(doctor_name)), '^(Mr|Mrs|Ms|Dr)\.?\s*', '', 'i')),
+            '\s*,?\s*\b([A-Z]{2,5}(?:\.?,?\s*[A-Z]{2,5})*)\.?\s*$', ''
+        ))
+        FROM POSITION(' ' IN TRIM(REGEXP_REPLACE(
+            TRIM(REGEXP_REPLACE(INITCAP(LOWER(doctor_name)), '^(Mr|Mrs|Ms|Dr)\.?\s*', '', 'i')),
+            '\s*,?\s*\b([A-Z]{2,5}(?:\.?,?\s*[A-Z]{2,5})*)\.?\s*$', ''
+        ))) + 1
+    ) AS doctor_last_name
+FROM bronze.staging_table;
+
+
+-- ------------------------------------------------------------
+-- HOSPITAL
+-- ------------------------------------------------------------
+
+-- Fix: replace hyphens with spaces, remove commas, collapse extra
+-- whitespace, and strip leading/trailing "and" — returns a fully
+-- normalized hospital name
+SELECT
+    hospital,
+    TRIM(
+        REGEXP_REPLACE(
+            REGEXP_REPLACE(
+                TRIM(REGEXP_REPLACE(REPLACE(REPLACE(hospital, '-', ' '), ',', ''), '\s+', ' ', 'g')),
+                '^and\s+', '', 'i'
+            ),
+            '\s+and$', '', 'i'
+        )
+    ) AS clean_hospital
+FROM bronze.staging_table;
+
+
+-- ------------------------------------------------------------
+-- INSURANCE PROVIDER
+-- ------------------------------------------------------------
+
+-- Test: confirm no nulls, all values follow standard naming
+SELECT DISTINCT insurance_provider
+FROM bronze.staging_table;
+
+
+-- ------------------------------------------------------------
+-- BILLING AMOUNT
+-- ------------------------------------------------------------
+
+-- Test: identify negative values, nulls, or values with excessive decimal places
+SELECT DISTINCT billing_amount
+FROM bronze.staging_table
+WHERE billing_amount < 0 OR billing_amount IS NULL;
+
+-- Fix: convert negatives to their positive equivalent, nulls to 0,
+-- and round everything to 2 decimal places
+SELECT DISTINCT
+    ROUND(billing_amount, 2) AS billing_amount,
+    CASE
+        WHEN billing_amount IS NULL THEN 0
+        WHEN billing_amount < 0 THEN ROUND(ABS(billing_amount), 2)
+        ELSE ROUND(billing_amount, 2)
+    END AS fixed_billing
+FROM bronze.staging_table
+WHERE billing_amount < 0;  -- sanity check: confirm the CASE fix worked
+
+
+-- ------------------------------------------------------------
+-- ROOM NUMBER
+-- ------------------------------------------------------------
+
+-- Test: confirm no nulls, values follow expected format
+SELECT DISTINCT room_number, name
+FROM bronze.staging_table
+WHERE room_number IS NULL;
+
+
+-- ------------------------------------------------------------
+-- ADMISSION TYPE
+-- ------------------------------------------------------------
+
+-- Test: check for leading/trailing whitespace
+SELECT admission_type
+FROM bronze.staging_table
+WHERE admission_type != TRIM(admission_type);
+
+-- Test: confirm no nulls or unexpected category values
+SELECT DISTINCT admission_type
+FROM bronze.staging_table;
+
+
+-- ------------------------------------------------------------
+-- DISCHARGE DATE
+-- ------------------------------------------------------------
+
+-- Test: check for null discharge dates, discharge dates before
+-- admission date, or discharge dates beyond today (6/18/2026)
+SELECT discharge_date, name
+FROM bronze.staging_table
+WHERE discharge_date IS NULL
+   OR discharge_date < date_of_admission
+   OR discharge_date > '2026-06-18';
+
+
+-- ------------------------------------------------------------
+-- MEDICATION
+-- ------------------------------------------------------------
+
+-- Test: confirm no nulls, values follow expected format
+SELECT DISTINCT medication
+FROM bronze.staging_table;
+
+
+-- ------------------------------------------------------------
+-- TEST RESULTS
+-- ------------------------------------------------------------
+
+-- Test: confirm no nulls, values follow expected format
+SELECT DISTINCT test_results
+FROM bronze.staging_table;
