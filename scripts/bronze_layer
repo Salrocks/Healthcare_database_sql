@@ -1,65 +1,84 @@
 /*
-=========================================================
-Creating the Schema Architecture
-=========================================================
+============================================================
+ Bronze Layer Setup
+ Purpose: Create the medallion schema architecture (bronze,
+ silver, gold), build the Bronze staging table that mirrors
+ the raw Kaggle CSV exactly, and load the source data in.
+ This script is the starting point of the pipeline — nothing
+ is cleaned or transformed here, only ingested as-is.
+============================================================
 */
 
+/*
+------------------------------------------------------------
+Creating the Schema Architecture
+------------------------------------------------------------
+Three schemas represent the three stages of the medallion
+pipeline: bronze (raw), silver (cleaned), gold (analytics-ready)
+*/
 CREATE SCHEMA bronze;
-
 CREATE SCHEMA silver;
-
 CREATE SCHEMA gold;
 
-/*
-=========================================================
-Creating staging table in bronze layer
-=========================================================
-*/
 
+/*
+------------------------------------------------------------
+Creating staging table in bronze layer
+------------------------------------------------------------
+Mirrors the raw CSV column-for-column. No constraints, no
+primary keys — this table's only job is to hold the source
+data exactly as it came in, untouched.
+*/
 CREATE TABLE bronze.staging_table (
-name VARCHAR(60),
-age INT,
-gender VARCHAR(50),
-blood_type VARCHAR(50),
-medical_condition VARCHAR(50),
-date_of_admission DATE,
-doctor_name VARCHAR(50),
-hospital VARCHAR(50),
-insurance_provider VARCHAR(50),
-billing_amount NUMERIC,
-room_number INT,
-admission_type VARCHAR(50),
-discharge_date DATE,
-medication VARCHAR(50),
-test_results VARCHAR(50)
+    name                VARCHAR(60),
+    age                 INT,
+    gender              VARCHAR(50),
+    blood_type          VARCHAR(50),
+    medical_condition   VARCHAR(50),
+    date_of_admission   DATE,
+    doctor_name         VARCHAR(50),
+    hospital            VARCHAR(50),
+    insurance_provider  VARCHAR(50),
+    billing_amount      NUMERIC,
+    room_number         INT,
+    admission_type      VARCHAR(50),
+    discharge_date      DATE,
+    medication          VARCHAR(50),
+    test_results        VARCHAR(50)
 );
 
-/*
-=========================================================
-Import data from Kaggle into our staging table
-=========================================================
-*/
 
+/*
+------------------------------------------------------------
+Import data from Kaggle into our staging table
+------------------------------------------------------------
+Loads the raw healthcare dataset CSV directly into the Bronze
+staging table, preserving every value exactly as sourced.
+*/
 COPY bronze.staging_table
 FROM '/tmp/healthcare_dataset.csv'
 DELIMITER ','
 CSV HEADER;
 
-/*
-=========================================================
-Verify infromation was added to table correctly
-=========================================================
-*/
 
+/*
+------------------------------------------------------------
+Verify information was added to the table correctly
+------------------------------------------------------------
+Quick sanity check — confirms the COPY loaded data and that
+column values look correct before moving on.
+*/
 SELECT * FROM bronze.staging_table
-LIMIT 4
+LIMIT 4;
+
 
 /*
-=========================================================
-Verify all rows were copy
-=========================================================
+------------------------------------------------------------
+Verify all rows were copied
+------------------------------------------------------------
+Confirms the total row count in Bronze matches the expected
+row count of the source CSV.
 */
+SELECT COUNT(*) FROM bronze.staging_table;
 
-SELECT COUNT(*) FROM bronze.staging_table
-
---BRONZE STAGE COMPLETE !
+-- BRONZE STAGE COMPLETE
